@@ -1,14 +1,13 @@
 [Unit]
 Description=Anthony Magic Mirror
-After=graphical-session.target network-online.target
-Wants=network-online.target
+After=graphical-session.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/MagicMirror
-ExecStart=/usr/bin/node --run start
 Restart=always
 RestartSec=15
+WorkingDirectory=%h/MagicMirror
+ExecStart=/usr/bin/node --run start
 
 [Install]
 WantedBy=default.target
