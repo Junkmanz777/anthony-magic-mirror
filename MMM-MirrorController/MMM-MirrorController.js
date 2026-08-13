@@ -3,298 +3,1055 @@ Module.register("MMM-MirrorController", {
     mirrorName: "HAL",
 
     weather: {
-      temperature: "72°F",
-      rainChance: "20%"
+      temperature: "--°F",
+      rainChance: "--%"
     },
 
     headlines: [
       {
-        title: "New Mexico man fires gun during dispute",
+        title: "Daily Buzz is not loaded yet",
         detail:
-          "This is temporary sample content. Later the Daily Buzz system will provide the real story."
-      },
-      {
-        title: "Storm warning issued for Curry County",
-        detail:
-          "Weather information and other details can appear here when this headline is selected."
-      },
-      {
-        title: "Major national story develops overnight",
-        detail:
-          "The center display is reserved for longer information when you ask for it."
-      },
-      {
-        title: "Clovis council considers new proposal",
-        detail:
-          "Local stories will be included in the Daily Buzz."
-      },
-      {
-        title: "Today's Scripture: Proverbs 27:6",
-        detail:
-          "Faith-related content can appear as one of the day's selectable items."
+          "Later, this area will contain today's real Daily Buzz stories."
       }
     ]
   },
+
+
+  /*
+   * START
+   *
+   * Runs when MagicMirror loads this module.
+   */
 
   start() {
     Log.info("Starting MMM-MirrorController");
 
     this.selectedStory = null;
+
     this.spokenText = "Ready.";
 
-    // Refresh periodically so the clock stays current.
+    /*
+     * Until the backend answers us,
+     * we don't know whether setup has been completed.
+     */
+
+    this.setupLoaded = false;
+
+    this.setupComplete = false;
+
+    this.setupState = null;
+
+    this.setupMessage = "";
+
+
+    /*
+     * Ask node_helper.js for saved setup information.
+     */
+
+    this.sendSocketNotification(
+      "MIRROR_GET_SETUP"
+    );
+
+
+    /*
+     * Refresh the display every 15 seconds.
+     *
+     * This keeps the clock current.
+     */
+
     this.clockTimer = setInterval(() => {
       this.updateDom(0);
     }, 15000);
   },
 
+
   getStyles() {
-    return ["MMM-MirrorController.css"];
+    return [
+      "MMM-MirrorController.css"
+    ];
   },
 
+
+  /*
+   * RECEIVE BACKEND MESSAGES
+   */
+
+  socketNotificationReceived(
+    notification,
+    payload
+  ) {
+
+    /*
+     * Backend answered our setup question.
+     */
+
+    if (
+      notification ===
+      "MIRROR_SETUP_STATE"
+    ) {
+
+      this.setupLoaded = true;
+
+      this.setupState = payload;
+
+      this.setupComplete =
+        Boolean(
+          payload &&
+          payload.setupComplete
+        );
+
+
+      /*
+       * Use the saved mirror name.
+       */
+
+      if (
+        payload &&
+        payload.settings &&
+        payload.settings.mirrorName
+      ) {
+        this.config.mirrorName =
+          payload.settings.mirrorName;
+      }
+
+
+      this.updateDom(300);
+
+      return;
+    }
+
+
+    /*
+     * Backend finished saving setup.
+     */
+
+    if (
+      notification ===
+      "MIRROR_SETUP_SAVED"
+    ) {
+
+      if (
+        payload &&
+        payload.success
+      ) {
+
+        this.setupComplete = true;
+
+        this.setupState = payload;
+
+        if (
+          payload.settings &&
+          payload.settings.mirrorName
+        ) {
+          this.config.mirrorName =
+            payload.settings.mirrorName;
+        }
+
+        this.spokenText =
+          `Setup complete. ${this.config.mirrorName} is ready.`;
+
+        this.updateDom(500);
+
+      } else {
+
+        this.setupMessage =
+          payload?.error ||
+          "Setup could not be saved.";
+
+        this.updateDom(300);
+      }
+
+      return;
+    }
+
+
+    /*
+     * Simple backend communication test.
+     */
+
+    if (
+      notification ===
+      "MIRROR_PONG"
+    ) {
+
+      Log.info(
+        "[MMM-MirrorController]",
+        payload?.message ||
+        "Backend responded."
+      );
+    }
+  },
+
+
+  /*
+   * MAIN DISPLAY DECISION
+   */
+
   getDom() {
-    const wrapper = document.createElement("div");
-    wrapper.className = "mirror-controller";
+
+    /*
+     * Waiting for backend.
+     */
+
+    if (!this.setupLoaded) {
+      return this.buildLoadingScreen();
+    }
+
+
+    /*
+     * First boot.
+     */
+
+    if (!this.setupComplete) {
+      return this.buildSetupScreen();
+    }
+
+
+    /*
+     * Normal mirror.
+     */
+
+    return this.buildMirrorScreen();
+  },
+
+
+  /*
+   * LOADING SCREEN
+   */
+
+  buildLoadingScreen() {
+
+    const wrapper =
+      document.createElement("div");
+
+    wrapper.className =
+      "mirror-loading-screen";
+
+
+    const text =
+      document.createElement("div");
+
+    text.className =
+      "mirror-loading-text";
+
+    text.textContent =
+      "Starting mirror...";
+
+
+    wrapper.appendChild(text);
+
+    return wrapper;
+  },
+
+
+  /*
+   * FIRST-BOOT SETUP SCREEN
+   */
+
+  buildSetupScreen() {
+
+    const wrapper =
+      document.createElement("div");
+
+    wrapper.className =
+      "mirror-setup-screen";
+
+
+    const panel =
+      document.createElement("div");
+
+    panel.className =
+      "mirror-setup-panel";
+
+
+    /*
+     * TITLE
+     */
+
+    const title =
+      document.createElement("h1");
+
+    title.textContent =
+      "Welcome";
+
+
+    const intro =
+      document.createElement("p");
+
+    intro.className =
+      "mirror-setup-intro";
+
+    intro.textContent =
+      "Let's set up your mirror.";
+
+
+    panel.appendChild(title);
+    panel.appendChild(intro);
+
+
+    /*
+     * USER NAME
+     */
+
+    const userName =
+      this.createSetupField(
+        panel,
+        "Your name",
+        "text",
+        "Anthony"
+      );
+
+
+    /*
+     * MIRROR NAME
+     */
+
+    const mirrorName =
+      this.createSetupField(
+        panel,
+        "What do you want to call the mirror?",
+        "text",
+        "HAL"
+      );
+
+
+    /*
+     * LOCATION
+     */
+
+    const location =
+      this.createSetupField(
+        panel,
+        "Location",
+        "text",
+        "Clovis, New Mexico"
+      );
+
+
+    /*
+     * VOICE STYLE
+     */
+
+    const voiceLabel =
+      document.createElement("label");
+
+    voiceLabel.textContent =
+      "Voice style";
+
+
+    const voice =
+      document.createElement("select");
+
+
+    const voiceChoices = [
+      {
+        value: "hal",
+        name: "HAL-style — calm and deliberate"
+      },
+      {
+        value: "natural",
+        name: "Natural"
+      },
+      {
+        value: "warm",
+        name: "Warm"
+      },
+      {
+        value: "direct",
+        name: "Direct"
+      },
+      {
+        value: "formal",
+        name: "Formal"
+      }
+    ];
+
+
+    voiceChoices.forEach(
+      (choice) => {
+
+        const option =
+          document.createElement("option");
+
+        option.value =
+          choice.value;
+
+        option.textContent =
+          choice.name;
+
+
+        voice.appendChild(option);
+      }
+    );
+
+
+    voice.value = "hal";
+
+    panel.appendChild(voiceLabel);
+    panel.appendChild(voice);
+
+
+    /*
+     * AI MODEL
+     */
+
+    const modelLabel =
+      document.createElement("label");
+
+    modelLabel.textContent =
+      "AI model";
+
+
+    const model =
+      document.createElement("select");
+
+
+    const automatic =
+      document.createElement("option");
+
+    automatic.value = "auto";
+
+    automatic.textContent =
+      "Automatic — recommended";
+
+
+    model.appendChild(automatic);
+
+
+    /*
+     * Later the backend can retrieve the actual
+     * models available to the user's API account.
+     */
+
+    model.value = "auto";
+
+
+    panel.appendChild(modelLabel);
+    panel.appendChild(model);
+
+
+    /*
+     * OPENAI API KEY
+     */
+
+    const apiKey =
+      this.createSetupField(
+        panel,
+        "OpenAI API key",
+        "password",
+        ""
+      );
+
+
+    apiKey.placeholder =
+      "Optional for now";
+
+
+    /*
+     * SECURITY NOTE
+     */
+
+    const security =
+      document.createElement("div");
+
+    security.className =
+      "mirror-setup-security";
+
+    security.textContent =
+      "Your API key will be stored privately on this device and will not be placed in the GitHub repository.";
+
+
+    panel.appendChild(security);
+
+
+    /*
+     * ERROR / STATUS MESSAGE
+     */
+
+    if (this.setupMessage) {
+
+      const message =
+        document.createElement("div");
+
+      message.className =
+        "mirror-setup-message";
+
+      message.textContent =
+        this.setupMessage;
+
+      panel.appendChild(message);
+    }
+
+
+    /*
+     * SAVE BUTTON
+     */
+
+    const button =
+      document.createElement("button");
+
+    button.className =
+      "mirror-setup-button";
+
+    button.textContent =
+      "Finish Setup";
+
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        const cleanUserName =
+          userName.value.trim();
+
+        const cleanMirrorName =
+          mirrorName.value.trim();
+
+
+        /*
+         * Require only the two most basic fields.
+         */
+
+        if (!cleanUserName) {
+
+          this.setupMessage =
+            "Please enter your name.";
+
+          this.updateDom(200);
+
+          return;
+        }
+
+
+        if (!cleanMirrorName) {
+
+          this.setupMessage =
+            "Please give the mirror a name.";
+
+          this.updateDom(200);
+
+          return;
+        }
+
+
+        this.setupMessage =
+          "Saving setup...";
+
+
+        /*
+         * Send everything to node_helper.js.
+         */
+
+        this.sendSocketNotification(
+          "MIRROR_SAVE_SETUP",
+          {
+            userName:
+              cleanUserName,
+
+            mirrorName:
+              cleanMirrorName,
+
+            location:
+              location.value.trim(),
+
+            voice:
+              voice.value,
+
+            model:
+              model.value,
+
+            apiKey:
+              apiKey.value.trim()
+          }
+        );
+
+
+        this.updateDom(200);
+      }
+    );
+
+
+    panel.appendChild(button);
+
+    wrapper.appendChild(panel);
+
+    return wrapper;
+  },
+
+
+  /*
+   * HELPER FUNCTION FOR SETUP INPUTS
+   *
+   * Saves us from repeating the same HTML code.
+   */
+
+  createSetupField(
+    panel,
+    labelText,
+    inputType,
+    defaultValue
+  ) {
+
+    const label =
+      document.createElement("label");
+
+    label.textContent =
+      labelText;
+
+
+    const input =
+      document.createElement("input");
+
+    input.type =
+      inputType;
+
+    input.value =
+      defaultValue;
+
+
+    panel.appendChild(label);
+    panel.appendChild(input);
+
+
+    return input;
+  },
+
+
+  /*
+   * NORMAL MIRROR DISPLAY
+   */
+
+  buildMirrorScreen() {
+
+    const wrapper =
+      document.createElement("div");
+
+    wrapper.className =
+      "mirror-controller";
+
 
     /*
      * MAIN MIRROR AREA
-     *
-     * Normally this stays empty so the person can see themselves.
-     * It only shows content when a story or request needs more space.
      */
-    const mainDisplay = document.createElement("main");
-    mainDisplay.className = "mirror-main-display";
+
+    const mainDisplay =
+      document.createElement("main");
+
+    mainDisplay.className =
+      "mirror-main-display";
+
 
     if (this.selectedStory) {
-      const expandedCard = document.createElement("article");
-      expandedCard.className = "mirror-expanded-card";
 
-      const title = document.createElement("h1");
-      title.textContent = this.selectedStory.title;
+      const expandedCard =
+        document.createElement("article");
 
-      const body = document.createElement("p");
-      body.textContent = this.selectedStory.detail;
+      expandedCard.className =
+        "mirror-expanded-card";
+
+
+      const title =
+        document.createElement("h1");
+
+      title.textContent =
+        this.selectedStory.title;
+
+
+      const body =
+        document.createElement("p");
+
+      body.textContent =
+        this.selectedStory.detail;
+
 
       expandedCard.appendChild(title);
+
       expandedCard.appendChild(body);
-      mainDisplay.appendChild(expandedCard);
+
+      mainDisplay.appendChild(
+        expandedCard
+      );
     }
 
+
     /*
-     * RIGHT SIDE
-     *
-     * Time
-     * Temperature / rain chance
-     * Date
-     * Today's selectable headlines
+     * RIGHT RAIL
      */
-    const rightRail = document.createElement("aside");
-    rightRail.className = "mirror-right-rail";
 
-    const now = new Date(Date.now());
+    const rightRail =
+      document.createElement("aside");
 
-    const time = document.createElement("div");
-    time.className = "mirror-time";
-    time.textContent = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true
-    }).format(now);
+    rightRail.className =
+      "mirror-right-rail";
 
-    const weather = document.createElement("div");
-    weather.className = "mirror-weather";
 
-    const temperature = document.createElement("span");
-    temperature.textContent = this.config.weather.temperature;
+    const now =
+      new Date();
 
-    const rain = document.createElement("span");
-    rain.className = "mirror-rain";
-    rain.textContent = `Rain ${this.config.weather.rainChance}`;
 
-    weather.appendChild(temperature);
-    weather.appendChild(rain);
+    /*
+     * TIME
+     */
 
-    const date = document.createElement("div");
-    date.className = "mirror-date";
-    date.textContent = new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric"
-    }).format(now);
+    const time =
+      document.createElement("div");
 
-    const headlines = document.createElement("div");
-    headlines.className = "mirror-headlines";
+    time.className =
+      "mirror-time";
 
-    this.config.headlines.forEach((story) => {
-      const headline = document.createElement("button");
+    time.textContent =
+      new Intl.DateTimeFormat(
+        "en-US",
+        {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true
+        }
+      ).format(now);
 
-      headline.className = "mirror-headline";
-      headline.textContent = story.title;
 
-      if (
-        this.selectedStory &&
-        this.selectedStory.title === story.title
-      ) {
-        headline.classList.add("active");
+    /*
+     * WEATHER
+     */
+
+    const weather =
+      document.createElement("div");
+
+    weather.className =
+      "mirror-weather";
+
+
+    const temperature =
+      document.createElement("span");
+
+    temperature.textContent =
+      this.config.weather.temperature;
+
+
+    const rain =
+      document.createElement("span");
+
+    rain.className =
+      "mirror-rain";
+
+    rain.textContent =
+      `Rain ${this.config.weather.rainChance}`;
+
+
+    weather.appendChild(
+      temperature
+    );
+
+    weather.appendChild(
+      rain
+    );
+
+
+    /*
+     * DATE
+     */
+
+    const date =
+      document.createElement("div");
+
+    date.className =
+      "mirror-date";
+
+    date.textContent =
+      new Intl.DateTimeFormat(
+        "en-US",
+        {
+          weekday: "long",
+          month: "long",
+          day: "numeric"
+        }
+      ).format(now);
+
+
+    /*
+     * HEADLINES
+     */
+
+    const headlines =
+      document.createElement("div");
+
+    headlines.className =
+      "mirror-headlines";
+
+
+    this.config.headlines.forEach(
+      (story) => {
+
+        const headline =
+          document.createElement("button");
+
+        headline.className =
+          "mirror-headline";
+
+        headline.textContent =
+          story.title;
+
+
+        if (
+          this.selectedStory &&
+          this.selectedStory.title ===
+            story.title
+        ) {
+          headline.classList.add(
+            "active"
+          );
+        }
+
+
+        headline.addEventListener(
+          "click",
+          () => {
+
+            this.selectedStory =
+              story;
+
+
+            this.spokenText =
+              `Here's the story: ${story.title}.`;
+
+
+            this.updateDom(200);
+          }
+        );
+
+
+        headlines.appendChild(
+          headline
+        );
       }
+    );
 
-      headline.addEventListener("click", () => {
-        this.selectedStory = story;
-
-        this.spokenText =
-          `Here's the story: ${story.title}.`;
-
-        this.updateDom(200);
-      });
-
-      headlines.appendChild(headline);
-    });
 
     rightRail.appendChild(time);
+
     rightRail.appendChild(weather);
+
     rightRail.appendChild(date);
+
     rightRail.appendChild(headlines);
 
+
     /*
-     * BOTTOM RESPONSE AREA
-     *
-     * Eventually this will display what the AI is currently saying.
-     * CSS will enforce the maximum five-line rule.
+     * BOTTOM AI RESPONSE
      */
-    const responseArea = document.createElement("section");
-    responseArea.className = "mirror-response";
 
-    const voiceName = document.createElement("div");
-    voiceName.className = "mirror-voice-name";
-    voiceName.textContent = this.config.mirrorName;
+    const responseArea =
+      document.createElement("section");
 
-    const caption = document.createElement("div");
-    caption.className = "mirror-caption";
-    caption.textContent = this.spokenText;
+    responseArea.className =
+      "mirror-response";
 
-    responseArea.appendChild(voiceName);
-    responseArea.appendChild(caption);
 
-    wrapper.appendChild(mainDisplay);
-    wrapper.appendChild(rightRail);
-    wrapper.appendChild(responseArea);
+    const voiceName =
+      document.createElement("div");
+
+    voiceName.className =
+      "mirror-voice-name";
+
+    voiceName.textContent =
+      this.config.mirrorName;
+
+
+    const caption =
+      document.createElement("div");
+
+    caption.className =
+      "mirror-caption";
+
+    caption.textContent =
+      this.spokenText;
+
+
+    responseArea.appendChild(
+      voiceName
+    );
+
+    responseArea.appendChild(
+      caption
+    );
+
+
+    /*
+     * BUILD FINAL SCREEN
+     */
+
+    wrapper.appendChild(
+      mainDisplay
+    );
+
+    wrapper.appendChild(
+      rightRail
+    );
+
+    wrapper.appendChild(
+      responseArea
+    );
+
 
     return wrapper;
   }
 });
+
 
 /*
 ===============================================================================
 NOTES TO A NEWBIE PROGRAMMER
 ===============================================================================
 
-WHAT THIS FILE DOES:
+WHAT CHANGED IN THIS VERSION:
 
-This is the main front-end controller for the mirror screen.
+The mirror now has TWO MODES:
 
-MagicMirror loads this file and runs:
-
-    Module.register("MMM-MirrorController", ...)
-
-The module then creates the pieces you see on the screen.
-
-The screen has three major areas:
-
-1. mirror-main-display
-   The large center/left portion.
-   Normally this is empty so the mirror stays usable.
-
-2. mirror-right-rail
-   The narrow section on the right.
-   It contains:
-   - time
-   - temperature
-   - rain chance
-   - date
-   - Daily Buzz headlines
-
-3. mirror-response
-   The strip across the bottom.
-   Eventually this displays what the AI is saying.
+1. SETUP MODE
+2. NORMAL MIRROR MODE
 
 
-WHERE THE DATA COMES FROM RIGHT NOW:
+WHEN THE MIRROR STARTS:
 
-The weather and headlines near the top of this file are FAKE TEST DATA.
+MMM-MirrorController.js sends this message:
 
-For example:
+    MIRROR_GET_SETUP
 
-    temperature: "72°F"
-
-Later node_helper.js will retrieve real information and send it here.
-
-
-HOW TO CHANGE THE MIRROR'S DEFAULT NAME:
-
-Change:
-
-    mirrorName: "HAL"
-
-For example:
-
-    mirrorName: "Jarvis"
-
-
-HOW TO CHANGE THE SAMPLE HEADLINES:
-
-Look for:
-
-    headlines: [
-
-Each story has:
-
-    title:
-    detail:
-
-"title" appears on the right side.
-
-"detail" appears in the large center display after the story is selected.
-
-
-HOW THE CENTER SCREEN WORKS:
-
-Normally:
-
-    this.selectedStory = null
-
-That means nothing appears in the center.
-
-When a headline is clicked, selectedStory becomes that story.
-
-MagicMirror then calls:
-
-    this.updateDom()
-
-That causes the screen to redraw.
-
-
-HOW TO MAKE MAJOR CHANGES:
-
-If we want to change WHAT information the mirror displays,
-we usually change THIS JavaScript file.
-
-If we want to change HOW it looks — sizes, spacing, position,
-fonts, etc. — we change:
-
-    MMM-MirrorController.css
-
-If we want to talk to the internet, OpenAI, weather services,
-save settings, or handle private API keys, we use:
+to:
 
     node_helper.js
 
 
-IMPORTANT:
+The backend checks whether setup information
+has already been saved.
 
-Do not put an OpenAI API key in this file.
 
-This file runs on the visible/browser side of MagicMirror.
-Secrets belong in the private backend.
+IF SETUP HAS NEVER BEEN COMPLETED:
+
+The screen displays a form asking for:
+
+- your name
+- mirror name
+- location
+- voice style
+- AI model
+- OpenAI API key
+
+
+WHEN YOU CLICK "FINISH SETUP":
+
+The screen sends:
+
+    MIRROR_SAVE_SETUP
+
+to node_helper.js.
+
+
+THE BACKEND SAVES THE INFORMATION.
+
+It then sends:
+
+    MIRROR_SETUP_SAVED
+
+
+The visible screen then switches from setup mode
+to the normal mirror.
+
+
+IMPORTANT SECURITY DETAIL:
+
+The API key exists temporarily inside the password
+box while setup is being completed.
+
+After the form is submitted, it is sent to
+node_helper.js.
+
+node_helper.js stores it privately.
+
+The API key is NOT saved inside this JavaScript file.
+
+
+WHAT setupLoaded MEANS:
+
+    this.setupLoaded
+
+means:
+
+"Has the backend answered us yet?"
+
+
+WHAT setupComplete MEANS:
+
+    this.setupComplete
+
+means:
+
+"Has the user completed first-boot setup?"
+
+
+WHY WE HAVE buildSetupScreen():
+
+Instead of putting everything inside getDom(),
+we split the screen into smaller functions.
+
+This makes the program easier to understand.
+
+
+THE MAJOR SCREEN FUNCTIONS ARE:
+
+    buildLoadingScreen()
+
+Shows:
+
+    Starting mirror...
+
+
+    buildSetupScreen()
+
+Shows the first-boot setup.
+
+
+    buildMirrorScreen()
+
+Shows the actual everyday mirror.
+
+
+HOW TO ADD ANOTHER SETUP QUESTION:
+
+Inside:
+
+    buildSetupScreen()
+
+add another field.
+
+Then include that value in:
+
+    MIRROR_SAVE_SETUP
+
+And update node_helper.js so it knows how to
+save that setting.
+
+
+HOW TO CHANGE THE NORMAL MIRROR:
+
+Use:
+
+    buildMirrorScreen()
+
+
+HOW TO CHANGE HOW THINGS LOOK:
+
+Use:
+
+    MMM-MirrorController.css
+
+
+NEXT BIG STEP:
+
+We need to add CSS for the new first-boot setup screen.
+
+After that we'll connect MMM-MirrorController
+to MagicMirror's config so the module actually loads.
 
 ===============================================================================
 */
