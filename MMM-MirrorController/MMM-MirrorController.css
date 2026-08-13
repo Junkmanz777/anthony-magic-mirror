@@ -1,1 +1,432 @@
+/*
+ * Anthony Magic Mirror
+ * Main display layout
+ */
 
+.MMM-MirrorController {
+  --right-rail-width: 29vw;
+  --bottom-response-height: 122px;
+
+  margin: 0;
+  padding: 0;
+}
+
+.mirror-controller {
+  position: fixed;
+  inset: 0;
+
+  width: 100vw;
+  height: 100vh;
+
+  overflow: hidden;
+
+  color: white;
+  background: transparent;
+
+  font-family: Arial, Helvetica, sans-serif;
+
+  pointer-events: none;
+}
+
+
+/*
+ * LARGE MIRROR AREA
+ *
+ * This stays empty most of the time.
+ */
+
+.mirror-main-display {
+  position: absolute;
+
+  top: 0;
+  left: 0;
+  right: var(--right-rail-width);
+  bottom: var(--bottom-response-height);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 6vh 6vw;
+}
+
+
+/*
+ * CENTER EXPANDED CONTENT
+ *
+ * Appears when a story or longer AI response needs
+ * more room than the bottom five-line area.
+ */
+
+.mirror-expanded-card {
+  width: min(760px, 78%);
+
+  max-height: 72%;
+
+  overflow: hidden;
+}
+
+.mirror-expanded-card h1 {
+  margin: 0 0 22px 0;
+
+  font-size: clamp(32px, 4vw, 60px);
+
+  font-weight: 500;
+
+  line-height: 1.08;
+}
+
+.mirror-expanded-card p {
+  margin: 0;
+
+  font-size: clamp(20px, 2vw, 30px);
+
+  line-height: 1.45;
+
+  color: rgba(255, 255, 255, 0.82);
+}
+
+
+/*
+ * RIGHT SIDE
+ */
+
+.mirror-right-rail {
+  position: absolute;
+
+  top: 0;
+  right: 0;
+  bottom: var(--bottom-response-height);
+
+  width: var(--right-rail-width);
+
+  padding: 34px 34px 28px 28px;
+
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+
+  background: rgba(0, 0, 0, 0.84);
+
+  overflow: hidden;
+
+  pointer-events: auto;
+}
+
+
+/*
+ * TIME
+ */
+
+.mirror-time {
+  text-align: right;
+
+  margin-bottom: 5px;
+
+  font-size: clamp(26px, 2.15vw, 36px);
+
+  line-height: 1.1;
+
+  color: rgba(255, 255, 255, 0.96);
+}
+
+
+/*
+ * WEATHER
+ */
+
+.mirror-weather {
+  text-align: right;
+
+  margin-bottom: 7px;
+
+  font-size: clamp(17px, 1.35vw, 23px);
+
+  line-height: 1.2;
+
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.mirror-rain {
+  margin-left: 10px;
+
+  font-size: 0.78em;
+
+  color: rgba(255, 255, 255, 0.58);
+}
+
+
+/*
+ * DATE
+ */
+
+.mirror-date {
+  text-align: right;
+
+  margin-bottom: 26px;
+
+  font-size: clamp(15px, 1.2vw, 20px);
+
+  line-height: 1.25;
+
+  color: rgba(255, 255, 255, 0.58);
+}
+
+
+/*
+ * DAILY BUZZ HEADLINES
+ */
+
+.mirror-headlines {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 10px;
+}
+
+.mirror-headline {
+  width: 100%;
+
+  padding: 13px 0 17px 10px;
+
+  border: 0;
+
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.15);
+
+  background: transparent;
+
+  color: rgba(255, 255, 255, 0.88);
+
+  text-align: right;
+
+  font-family: inherit;
+
+  font-size: clamp(16px, 1.3vw, 22px);
+
+  line-height: 1.22;
+
+  cursor: pointer;
+}
+
+.mirror-headline:hover,
+.mirror-headline.active {
+  color: white;
+
+  border-bottom-color:
+    rgba(255, 255, 255, 0.65);
+}
+
+
+/*
+ * BOTTOM AI RESPONSE
+ */
+
+.mirror-response {
+  position: absolute;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  height: var(--bottom-response-height);
+
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 24px;
+
+  padding: 18px 34px 20px 34px;
+
+  border-top:
+    1px solid rgba(255, 255, 255, 0.16);
+
+  background: rgba(0, 0, 0, 0.91);
+}
+
+
+/*
+ * AI / MIRROR NAME
+ */
+
+.mirror-voice-name {
+  flex: 0 0 auto;
+
+  padding-top: 4px;
+
+  font-size: 16px;
+
+  letter-spacing: 0.15em;
+
+  color: rgba(255, 255, 255, 0.46);
+}
+
+
+/*
+ * SPOKEN RESPONSE TEXT
+ */
+
+.mirror-caption {
+  font-size: clamp(18px, 1.5vw, 25px);
+
+  line-height: 1.28;
+
+  color: rgba(255, 255, 255, 0.88);
+
+  /*
+   * HARD FIVE-LINE LIMIT
+   */
+
+  display: -webkit-box;
+
+  -webkit-box-orient: vertical;
+
+  -webkit-line-clamp: 5;
+
+  overflow: hidden;
+}
+
+
+/*
+===============================================================================
+NOTES TO A NEWBIE PROGRAMMER
+===============================================================================
+
+WHAT THIS FILE DOES:
+
+This file controls HOW the mirror looks.
+
+The JavaScript file decides WHAT appears.
+
+This CSS file decides:
+
+- where it appears
+- how large it is
+- fonts
+- spacing
+- borders
+- screen layout
+
+
+THE THREE MAIN AREAS:
+
+1. .mirror-main-display
+
+   This is the large open mirror area.
+
+   Normally we leave it blank.
+
+   Longer information can temporarily appear here.
+
+
+2. .mirror-right-rail
+
+   This is the information column on the right.
+
+   It contains:
+
+   - time
+   - temperature
+   - rain chance
+   - date
+   - Daily Buzz headlines
+
+
+3. .mirror-response
+
+   This is the strip across the bottom.
+
+   It shows the words the AI is currently saying.
+
+
+HOW TO MAKE THE RIGHT SIDE WIDER:
+
+Near the top you'll see:
+
+    --right-rail-width: 29vw;
+
+Change 29 to something larger.
+
+For example:
+
+    35vw
+
+would make the right side wider.
+
+Something like:
+
+    24vw
+
+would make it narrower.
+
+
+WHAT "vw" MEANS:
+
+vw means "viewport width."
+
+100vw means the entire width of the screen.
+
+29vw means 29 percent of the screen width.
+
+
+HOW TO MAKE THE BOTTOM AREA TALLER:
+
+Change:
+
+    --bottom-response-height: 122px;
+
+For example:
+
+    160px
+
+
+HOW TO CHANGE HEADLINE SIZE:
+
+Find:
+
+    .mirror-headline
+
+Then change:
+
+    font-size: clamp(16px, 1.3vw, 22px);
+
+
+THE FIVE-LINE RULE:
+
+The bottom AI response uses:
+
+    -webkit-line-clamp: 5;
+
+That prevents the bottom text from displaying
+more than five lines.
+
+Do not change this unless we intentionally decide
+to change the five-line rule.
+
+
+WHY EVERYTHING IS WHITE/BLACK:
+
+A real magic mirror works best when the screen displays
+bright information on a black background.
+
+Black portions of the monitor disappear behind the
+two-way mirror while bright text shines through.
+
+
+HOW TO MAKE MAJOR CHANGES:
+
+Want to change SCREEN POSITION or SIZE?
+
+    Change this CSS file.
+
+Want to change WHAT INFORMATION appears?
+
+    Change MMM-MirrorController.js
+
+Want to connect OpenAI, weather services, files,
+settings or other internet services?
+
+    Change node_helper.js
+
+===============================================================================
+*/
