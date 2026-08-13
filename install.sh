@@ -1,68 +1,104 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -e
+set -Eeuo pipefail
 
-echo "========================================"
-echo " Anthony Magic Mirror Installer"
-echo "========================================"
+MM_DIR="${MM_DIR:-$HOME/MagicMirror}"
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+NODE_SETUP="/tmp/nodesource_setup.sh"
 
-REPO_URL="https://github.com/Junkmanz777/anthony-magic-mirror.git"
-MM_DIR="$HOME/MagicMirror"
-PROJECT_DIR="$HOME/anthony-magic-mirror"
+log() {
+  printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$1"
+}
 
-echo "[1/7] Updating Raspberry Pi OS..."
-sudo apt update
-sudo apt upgrade -y
+fail() {
+  echo "ERROR: $1" >&2
+  exit 1
+}
 
-echo "[2/7] Installing system dependencies..."
-sudo apt install -y \
+node_is_supported() {
+  command -v node >/dev/null 2>&1 || return 1
+
+  local version major
+  version="$(node -p 'process.versions.node')"
+  major="${version%%.*}"
+
+  if [ "$major" -eq 22 ]; then
+    [ "$(printf '%s\n%s\n' '22.21.1' "$version" | sort -V | head -n1)" = "22.21.1" ]
+    return
+  fi
+
+  [ "$major" -ge 24 ]
+}
+
+log "Anthony Magic Mirror installer"
+
+if [ "${EUID}" -eq 0 ]; then
+  fail "Run this installer as your normal Raspberry Pi user, not as root."
+fi
+
+command -v sudo >/dev/null 2>&1 || fail "sudo is required."
+
+ARCH="$(dpkg --print-architecture 2>/dev/null || true)"
+
+if [ "$ARCH" != "arm64" ] && [ "$ARCH" != "amd64" ]; then
+  fail "Unsupported architecture: ${ARCH:-unknown}. Use 64-bit Raspberry Pi OS on a Pi 5."
+fi
+
+log "Updating package lists"
+sudo apt-get update
+
+log "Installing system dependencies"
+sudo apt-get install -y \
   git \
   curl \
   ca-certificates \
   build-essential \
   rsync
 
-echo "[3/7] Checking Node.js..."
+if ! node_is_supported; then
+  log "Installing a supported Node.js 22 release"
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js not found."
-  echo "Please install Node.js 22.21.1+ before continuing."
-  exit 1
+  curl -fsSL https://deb.nodesource.com/setup_22.x -o "$NODE_SETUP"
+  sudo -E bash "$NODE_SETUP"
+  sudo apt-get install -y nodejs
+  rm -f "$NODE_SETUP"
 fi
 
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
+node_is_supported || fail "Node.js is installed, but its version is not supported by the current MagicMirror release."
 
-if [ "$NODE_MAJOR" -lt 22 ]; then
-  echo "Node.js is too old: $(node --version)"
-  echo "MagicMirror currently requires Node 22.21.1+ or Node 24+."
-  exit 1
-fi
-
-echo "Node version: $(node --version)"
-
-echo "[4/7] Installing MagicMirror..."
+log "Using Node.js $(node --version)"
 
 if [ ! -d "$MM_DIR/.git" ]; then
+  log "Cloning MagicMirror"
   git clone https://github.com/MagicMirrorOrg/MagicMirror.git "$MM_DIR"
+else
+  log "Existing MagicMirror installation found; keeping its current Git revision"
 fi
 
+log "Installing MagicMirror production dependencies"
 cd "$MM_DIR"
 node --run install-mm
 
-echo "[5/7] Installing Anthony Magic Mirror files..."
-
+log "Installing Anthony Magic Mirror modules"
 mkdir -p "$MM_DIR/modules"
 
 if [ -d "$PROJECT_DIR/modules" ]; then
-  rsync -av "$PROJECT_DIR/modules/" "$MM_DIR/modules/"
+  rsync -a \
+    --exclude='.gitkeep' \
+    "$PROJECT_DIR/modules/" \
+    "$MM_DIR/modules/"
 fi
+
+log "Installing default configuration"
+mkdir -p "$MM_DIR/config"
 
 if [ ! -f "$MM_DIR/config/config.js" ]; then
   cp "$PROJECT_DIR/config/config.example.js" "$MM_DIR/config/config.js"
+else
+  echo "Keeping existing $MM_DIR/config/config.js"
 fi
 
-echo "[6/7] Installing startup service..."
-
+log "Installing user startup service"
 mkdir -p "$HOME/.config/systemd/user"
 
 cp \
@@ -72,13 +108,11 @@ cp \
 systemctl --user daemon-reload
 systemctl --user enable magicmirror.service
 
-echo "[7/7] Checking configuration..."
-
+log "Checking MagicMirror configuration"
 cd "$MM_DIR"
 node --run config:check
 
-echo
-echo "========================================"
-echo " Installation complete."
-echo " Reboot the Raspberry Pi to start."
-echo "========================================"
+log "Installation complete"
+
+echo "Reboot the Raspberry Pi, or start it now with:"
+echo "  systemctl --user start magicmirror.service"
