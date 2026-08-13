@@ -1,1 +1,26 @@
+# Secrets
+.env
+.env.*
+!.env.example
 
+# Personal MagicMirror config
+config/config.js
+
+# API keys
+secrets/
+*.key
+*.pem
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
