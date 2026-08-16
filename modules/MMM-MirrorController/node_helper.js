@@ -9,6 +9,11 @@ const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
 
+
+/*
+ * PRIVATE FILES
+ */
+
 const DATA_DIR = path.join(
   os.homedir(),
   ".config",
@@ -38,27 +43,50 @@ const VOICE_OUTPUT_FILE = path.join(
 
 module.exports = NodeHelper.create({
 
+  /*
+   * START
+   */
+
   start() {
+
     Log.log(
       "[MMM-MirrorController] Backend starting..."
     );
 
+
     this.voiceBusy = false;
 
     /*
-     * Remembers the previous OpenAI answer so follow-up
-     * questions can understand the conversation.
+     * This gives HAL short-term conversational memory.
+     *
+     * It lasts until MagicMirror restarts.
      */
+
     this.lastResponseId = null;
+
+
+    /*
+     * If the user clicks a Daily Buzz headline,
+     * remember which one.
+     */
+
+    this.selectedStoryTitle = "";
+
 
     this.ensurePrivateStorage();
 
-    this.prepareAudio().catch((error) => {
-      Log.warn(
-        "[MMM-MirrorController] Audio preparation warning:",
-        error.message
+
+    this.prepareAudio()
+      .catch(
+        (error) => {
+
+          Log.warn(
+            "[MMM-MirrorController] Audio preparation warning:",
+            error.message
+          );
+        }
       );
-    });
+
 
     Log.log(
       "[MMM-MirrorController] Backend ready."
@@ -71,7 +99,13 @@ module.exports = NodeHelper.create({
    */
 
   ensurePrivateStorage() {
-    if (!fs.existsSync(DATA_DIR)) {
+
+    if (
+      !fs.existsSync(
+        DATA_DIR
+      )
+    ) {
+
       fs.mkdirSync(
         DATA_DIR,
         {
@@ -81,12 +115,16 @@ module.exports = NodeHelper.create({
       );
     }
 
+
     try {
+
       fs.chmodSync(
         DATA_DIR,
         0o700
       );
+
     } catch (error) {
+
       Log.warn(
         "[MMM-MirrorController] Could not change storage permissions."
       );
@@ -95,37 +133,48 @@ module.exports = NodeHelper.create({
 
 
   /*
-   * DEFAULT SETTINGS
+   * SETTINGS
    */
 
   getDefaultSettings() {
+
     return {
+
       userName: "",
-      mirrorName: "HAL",
-      location: "Clovis, New Mexico",
-      voice: "hal",
-      model: "auto"
+
+      mirrorName:
+        "HAL",
+
+      location:
+        "Clovis, New Mexico",
+
+      voice:
+        "hal",
+
+      model:
+        "auto"
     };
   },
 
 
-  /*
-   * LOAD SETTINGS
-   */
-
   loadSettings() {
+
     const defaults =
       this.getDefaultSettings();
+
 
     if (
       !fs.existsSync(
         SETTINGS_FILE
       )
     ) {
+
       return defaults;
     }
 
+
     try {
+
       const stored =
         JSON.parse(
           fs.readFileSync(
@@ -134,32 +183,36 @@ module.exports = NodeHelper.create({
           )
         );
 
+
       return {
+
         ...defaults,
+
         ...stored
       };
 
+
     } catch (error) {
+
       Log.error(
         "[MMM-MirrorController] Could not read settings:",
         error
       );
+
 
       return defaults;
     }
   },
 
 
-  /*
-   * SAVE SETTINGS
-   */
-
   saveSettings(payload = {}) {
+
     const settings = {
 
       userName:
         String(
-          payload.userName || ""
+          payload.userName ||
+          ""
         ).trim(),
 
       mirrorName:
@@ -187,66 +240,90 @@ module.exports = NodeHelper.create({
         ).trim()
     };
 
+
     fs.writeFileSync(
       SETTINGS_FILE,
+
       JSON.stringify(
         settings,
         null,
         2
       ),
+
       {
-        encoding: "utf8",
-        mode: 0o600
+        encoding:
+          "utf8",
+
+        mode:
+          0o600
       }
     );
+
 
     fs.chmodSync(
       SETTINGS_FILE,
       0o600
     );
+
 
     return settings;
   },
 
 
   /*
-   * API KEY
+   * OPENAI API KEY
    */
 
   saveApiKey(apiKey) {
+
     if (
-      typeof apiKey !== "string" ||
-      apiKey.trim() === ""
+      typeof apiKey !==
+        "string" ||
+
+      apiKey.trim() ===
+        ""
     ) {
+
       return false;
     }
 
+
     fs.writeFileSync(
       API_KEY_FILE,
+
       apiKey.trim(),
+
       {
-        encoding: "utf8",
-        mode: 0o600
+        encoding:
+          "utf8",
+
+        mode:
+          0o600
       }
     );
+
 
     fs.chmodSync(
       API_KEY_FILE,
       0o600
     );
 
+
     return true;
   },
 
 
   loadApiKey() {
+
     if (
       !fs.existsSync(
         API_KEY_FILE
       )
     ) {
+
       return "";
     }
+
 
     return fs
       .readFileSync(
@@ -258,24 +335,27 @@ module.exports = NodeHelper.create({
 
 
   apiKeyConfigured() {
+
     try {
+
       return (
-        this.loadApiKey()
+        this
+          .loadApiKey()
           .length > 0
       );
+
     } catch (error) {
+
       return false;
     }
   },
 
 
-  /*
-   * SETUP STATE
-   */
-
   getSetupState() {
+
     const settings =
       this.loadSettings();
+
 
     return {
 
@@ -294,21 +374,24 @@ module.exports = NodeHelper.create({
 
 
   /*
-   * FIND WM8960 AUDIO CARD
+   * AUDIO CARD
    */
 
   async findWm8960Card() {
 
     const attempts = [
+
       [
         "arecord",
         ["-l"]
       ],
+
       [
         "aplay",
         ["-l"]
       ]
     ];
+
 
     for (
       const [command, args]
@@ -325,37 +408,41 @@ module.exports = NodeHelper.create({
             command,
             args,
             {
-              encoding: "utf8"
+              encoding:
+                "utf8"
             }
           );
 
+
         const match =
-          `${stdout}\n${stderr}`.match(
-            /card\s+(\d+):\s+wm8960soundcard/i
-          );
+          `${stdout}\n${stderr}`
+            .match(
+              /card\s+(\d+):\s+wm8960soundcard/i
+            );
+
 
         if (match) {
+
           return Number(
             match[1]
           );
         }
 
+
       } catch (error) {
+
         /*
-         * Try next ALSA command.
+         * Try the other ALSA command.
          */
       }
     }
+
 
     throw new Error(
       "WM8960 audio HAT was not found."
     );
   },
 
-
-  /*
-   * SET ONE MIXER CONTROL
-   */
 
   async setMixer(
     card,
@@ -367,6 +454,7 @@ module.exports = NodeHelper.create({
 
       await execFileAsync(
         "amixer",
+
         [
           "-c",
           String(card),
@@ -377,12 +465,16 @@ module.exports = NodeHelper.create({
 
           value
         ],
+
         {
-          encoding: "utf8"
+          encoding:
+            "utf8"
         }
       );
 
+
       return true;
+
 
     } catch (error) {
 
@@ -390,22 +482,21 @@ module.exports = NodeHelper.create({
         `[MMM-MirrorController] Mixer control skipped: ${controlName}`
       );
 
+
       return false;
     }
   },
 
-
-  /*
-   * PREPARE AUDIO
-   */
 
   async prepareAudio() {
 
     const card =
       await this.findWm8960Card();
 
+
     this.audioCard =
       card;
+
 
     const controls = [
 
@@ -475,6 +566,7 @@ module.exports = NodeHelper.create({
       ]
     ];
 
+
     for (
       const [name, value]
       of controls
@@ -487,9 +579,11 @@ module.exports = NodeHelper.create({
       );
     }
 
+
     Log.log(
       `[MMM-MirrorController] WM8960 ready as ALSA card ${card}.`
     );
+
 
     return card;
   },
@@ -502,15 +596,17 @@ module.exports = NodeHelper.create({
         this.audioCard
       )
     ) {
+
       return this.audioCard;
     }
+
 
     return this.prepareAudio();
   },
 
 
   /*
-   * SEND STATUS TO SCREEN
+   * SCREEN STATUS MESSAGE
    */
 
   sendVoiceStatus(
@@ -520,6 +616,7 @@ module.exports = NodeHelper.create({
 
     this.sendSocketNotification(
       "MIRROR_VOICE_STATUS",
+
       {
 
         message,
@@ -537,7 +634,7 @@ module.exports = NodeHelper.create({
 
 
   /*
-   * RECORD MICROPHONE
+   * MICROPHONE RECORDING
    */
 
   async recordVoice() {
@@ -545,21 +642,27 @@ module.exports = NodeHelper.create({
     const card =
       await this.getAudioCard();
 
+
     try {
+
       fs.rmSync(
         VOICE_INPUT_FILE,
         {
           force: true
         }
       );
+
     } catch (error) {
+
       /*
-       * Fine if old file doesn't exist.
+       * Fine if no old file exists.
        */
     }
 
+
     await execFileAsync(
       "arecord",
+
       [
         "-D",
         `hw:${card},0`,
@@ -578,11 +681,16 @@ module.exports = NodeHelper.create({
 
         VOICE_INPUT_FILE
       ],
+
       {
-        encoding: "utf8",
-        timeout: 12000
+        encoding:
+          "utf8",
+
+        timeout:
+          12000
       }
     );
+
 
     if (
       !fs.existsSync(
@@ -594,6 +702,7 @@ module.exports = NodeHelper.create({
         "The microphone recording was not created."
       );
     }
+
 
     return VOICE_INPUT_FILE;
   },
@@ -613,39 +722,51 @@ module.exports = NodeHelper.create({
         filePath
       );
 
+
     const form =
       new FormData();
+
 
     form.append(
       "model",
       "gpt-4o-mini-transcribe"
     );
 
+
     form.append(
       "language",
       "en"
     );
 
+
     form.append(
+
       "file",
 
       new Blob(
         [audio],
+
         {
-          type: "audio/wav"
+          type:
+            "audio/wav"
         }
       ),
 
       "mirror-question.wav"
     );
 
+
     const response =
       await fetch(
         "https://api.openai.com/v1/audio/transcriptions",
+
         {
-          method: "POST",
+
+          method:
+            "POST",
 
           headers: {
+
             Authorization:
               `Bearer ${apiKey}`
           },
@@ -655,43 +776,361 @@ module.exports = NodeHelper.create({
         }
       );
 
+
     const data =
       await response.json();
+
 
     if (!response.ok) {
 
       throw new Error(
-        data?.error?.message ||
+        data
+          ?.error
+          ?.message ||
+
         "OpenAI transcription failed."
       );
     }
 
+
     return String(
-      data?.text || ""
+      data?.text ||
+      ""
     ).trim();
   },
 
 
   /*
-   * PICK AI MODEL
+   * MODEL CHOICE
    */
 
   chooseTextModel(settings) {
 
     if (
       settings.model &&
-      settings.model !== "auto"
+      settings.model !==
+        "auto"
     ) {
 
       return settings.model;
     }
+
 
     return "gpt-5-mini";
   },
 
 
   /*
-   * HAL'S PERSONALITY / RULES
+   * OPENAI SCREEN TOOLS
+   *
+   * These are the ONLY display commands
+   * HAL is allowed to issue.
+   */
+
+  getMirrorTools() {
+
+    return [
+
+      /*
+       * BUILT-IN LIVE WEB SEARCH
+       */
+
+      {
+        type:
+          "web_search",
+
+        search_context_size:
+          "low",
+
+        user_location: {
+
+          type:
+            "approximate",
+
+          city:
+            "Clovis",
+
+          region:
+            "New Mexico",
+
+          country:
+            "US",
+
+          timezone:
+            "America/Denver"
+        }
+      },
+
+
+      /*
+       * WEATHER
+       */
+
+      {
+        type:
+          "function",
+
+        name:
+          "set_weather",
+
+        description:
+          "Update the current temperature and rain chance shown in the top-right corner of the mirror. Use after finding current weather information.",
+
+        strict:
+          true,
+
+        parameters: {
+
+          type:
+            "object",
+
+          properties: {
+
+            temperature: {
+
+              type:
+                "string",
+
+              description:
+                "Current temperature including unit, for example 82°F."
+            },
+
+            rainChance: {
+
+              type:
+                "string",
+
+              description:
+                "Current or near-term precipitation chance including percent sign, for example 20%."
+            }
+          },
+
+          required: [
+            "temperature",
+            "rainChance"
+          ],
+
+          additionalProperties:
+            false
+        }
+      },
+
+
+      /*
+       * DAILY BUZZ
+       */
+
+      {
+        type:
+          "function",
+
+        name:
+          "set_daily_buzz",
+
+        description:
+          "Replace the short Daily Buzz prompts shown in the right rail. These should be short curiosity-provoking prompts the user may want to ask about, not long summaries.",
+
+        strict:
+          true,
+
+        parameters: {
+
+          type:
+            "object",
+
+          properties: {
+
+            items: {
+
+              type:
+                "array",
+
+              minItems:
+                3,
+
+              maxItems:
+                7,
+
+              items: {
+
+                type:
+                  "object",
+
+                properties: {
+
+                  category: {
+
+                    type:
+                      "string",
+
+                    description:
+                      "A short category such as scripture, world, US, New Mexico, Clovis, faith, science, or interest."
+                  },
+
+                  title: {
+
+                    type:
+                      "string",
+
+                    description:
+                      "A very short line for the right rail, preferably under 10 words."
+                  },
+
+                  detail: {
+
+                    type:
+                      "string",
+
+                    description:
+                      "A compact explanation held behind the headline for when the user clicks it or asks about it."
+                  }
+                },
+
+                required: [
+                  "category",
+                  "title",
+                  "detail"
+                ],
+
+                additionalProperties:
+                  false
+              }
+            }
+          },
+
+          required: [
+            "items"
+          ],
+
+          additionalProperties:
+            false
+        }
+      },
+
+
+      /*
+       * CENTER SCREEN
+       */
+
+      {
+        type:
+          "function",
+
+        name:
+          "show_center",
+
+        description:
+          "Show longer information in the large center portion of the mirror.",
+
+        strict:
+          true,
+
+        parameters: {
+
+          type:
+            "object",
+
+          properties: {
+
+            title: {
+
+              type:
+                "string"
+            },
+
+            body: {
+
+              type:
+                "string"
+            }
+          },
+
+          required: [
+            "title",
+            "body"
+          ],
+
+          additionalProperties:
+            false
+        }
+      },
+
+
+      /*
+       * CLEAR CENTER
+       */
+
+      {
+        type:
+          "function",
+
+        name:
+          "clear_center",
+
+        description:
+          "Clear temporary information from the center of the mirror and return it to an open mirror area.",
+
+        strict:
+          true,
+
+        parameters: {
+
+          type:
+            "object",
+
+          properties: {},
+
+          additionalProperties:
+            false
+        }
+      },
+
+
+      /*
+       * BOTTOM CAPTION
+       */
+
+      {
+        type:
+          "function",
+
+        name:
+          "set_caption",
+
+        description:
+          "Change the short caption shown at the bottom of the mirror.",
+
+        strict:
+          true,
+
+        parameters: {
+
+          type:
+            "object",
+
+          properties: {
+
+            text: {
+
+              type:
+                "string"
+            }
+          },
+
+          required: [
+            "text"
+          ],
+
+          additionalProperties:
+            false
+        }
+      }
+    ];
+  },
+
+
+  /*
+   * HAL'S OPERATING INSTRUCTIONS
    */
 
   getAssistantInstructions(
@@ -702,42 +1141,97 @@ module.exports = NodeHelper.create({
       settings.userName ||
       "the user";
 
+
     const mirrorName =
       settings.mirrorName ||
       "HAL";
+
 
     const location =
       settings.location ||
       "Clovis, New Mexico";
 
+
     return [
 
-      `You are ${mirrorName}, a voice assistant running on a smart mirror for ${userName}.`,
+      `You are ${mirrorName}, an intelligent voice assistant controlling a smart mirror for ${userName}.`,
 
-      `The user's location is ${location}.`,
+      `The user's saved location is ${location}.`,
 
       "Answer the user's actual question directly.",
 
-      "When the question depends on current information such as weather, temperature, news, prices, schedules, or something happening today, use web search before answering.",
+      "You control the mirror through safe display tools.",
 
-      "For weather questions, assume the saved user location unless the user names another place.",
+      "Use those tools whenever the user's request should visibly change the mirror.",
 
-      "Keep spoken answers compact unless more detail is necessary.",
 
-      "Do not pretend you performed actions or searches that you did not perform.",
+      /*
+       * WEATHER BEHAVIOR
+       */
 
-      "If you do not know something, say so.",
+      "For current weather, temperature, rain, or forecast questions, use web search.",
 
-      "The display has limited space, so favor clear concise sentences.",
+      "When you obtain the current temperature, also call set_weather so the top-right display stays useful.",
 
-      "For ordinary conversation, sound calm, restrained, intelligent, and practical."
+
+      /*
+       * DAILY BUZZ BEHAVIOR
+       */
+
+      "If the user asks to load, refresh, show, update, or create the Daily Buzz, use web search for current news first and then call set_daily_buzz.",
+
+      "Daily Buzz items belong on the RIGHT SIDE of the mirror.",
+
+      "Daily Buzz titles should be short prompts that invite the user to ask about them, not full summaries.",
+
+      "Aim for about 5 or 6 Daily Buzz items.",
+
+      "Include one short Scripture item, preferably KJV wording or a Scripture reference.",
+
+      "Include important current news when relevant.",
+
+      "Include at least one New Mexico or local-area item when a meaningful current story exists.",
+
+      "Other items can reflect faith, science, technology, culture, or other genuinely interesting developments.",
+
+      "Avoid sports unless the user specifically asks for sports.",
+
+      "The detail field should contain enough context that the item can later be expanded.",
+
+
+      /*
+       * CENTER SCREEN
+       */
+
+      "Use show_center when information is too long for the five-line bottom caption or when the user asks to display something.",
+
+      "Use clear_center when the user asks to clear, close, hide, dismiss, or return to the mirror.",
+
+
+      /*
+       * GENERAL
+       */
+
+      "Keep ordinary spoken answers concise unless more detail is useful.",
+
+      "Do not claim you changed the mirror unless you actually called the corresponding display tool.",
+
+      "Do not claim to have searched current information unless web search was actually used.",
+
+      "The bottom caption has a five-line visual limit.",
+
+      "The large center area is available for longer text.",
+
+      "The right rail is for time, weather, date, and Daily Buzz prompts.",
+
+      "Sound calm, restrained, intelligent, practical, and conversational."
 
     ].join(" ");
   },
 
 
   /*
-   * GET TEXT FROM OPENAI RESPONSE
+   * TEXT FROM A RESPONSES API RESULT
    */
 
   extractResponseText(data) {
@@ -745,13 +1239,16 @@ module.exports = NodeHelper.create({
     if (
       typeof data?.output_text ===
         "string" &&
+
       data.output_text.trim()
     ) {
 
       return data.output_text.trim();
     }
 
+
     const pieces = [];
+
 
     for (
       const item
@@ -766,6 +1263,7 @@ module.exports = NodeHelper.create({
         if (
           content?.type ===
             "output_text" &&
+
           content?.text
         ) {
 
@@ -776,6 +1274,7 @@ module.exports = NodeHelper.create({
       }
     }
 
+
     return pieces
       .join("\n")
       .trim();
@@ -783,89 +1282,287 @@ module.exports = NodeHelper.create({
 
 
   /*
-   * ASK OPENAI
+   * FUNCTION CALLS REQUESTED BY HAL
    */
 
-  async askOpenAI(
-    transcript,
-    apiKey,
-    settings
+  getFunctionCalls(data) {
+
+    return (
+      data?.output || []
+    ).filter(
+      (item) =>
+        item?.type ===
+        "function_call"
+    );
+  },
+
+
+  /*
+   * SAFE MIRROR COMMAND EXECUTION
+   */
+
+  executeMirrorTool(
+    name,
+    args = {}
   ) {
 
-    const requestBody = {
-
-      model:
-        this.chooseTextModel(
-          settings
-        ),
-
-      instructions:
-        this.getAssistantInstructions(
-          settings
-        ),
-
-      input:
-        transcript,
+    switch (name) {
 
 
       /*
-       * THIS IS IMPORTANT.
-       *
-       * HAL can now search the live web for
-       * current information.
+       * WEATHER
        */
 
-      tools: [
-        {
-          type: "web_search",
-          search_context_size:
-            "low"
+      case "set_weather":
+
+        this.sendSocketNotification(
+          "MIRROR_SCREEN_ACTION",
+
+          {
+
+            type:
+              "set_weather",
+
+            temperature:
+              String(
+                args.temperature ||
+                "--°F"
+              ),
+
+            rainChance:
+              String(
+                args.rainChance ||
+                "--%"
+              )
+          }
+        );
+
+
+        return {
+
+          success:
+            true,
+
+          message:
+            "Weather display updated."
+        };
+
+
+      /*
+       * DAILY BUZZ
+       */
+
+      case "set_daily_buzz": {
+
+        const items =
+          Array.isArray(
+            args.items
+          )
+
+            ? args.items
+                .slice(0, 7)
+                .map(
+                  (item) => ({
+
+                    category:
+                      String(
+                        item
+                          ?.category ||
+                        "buzz"
+                      ),
+
+                    title:
+                      String(
+                        item
+                          ?.title ||
+                        ""
+                      ).trim(),
+
+                    detail:
+                      String(
+                        item
+                          ?.detail ||
+                        ""
+                      ).trim()
+                  })
+                )
+                .filter(
+                  (item) =>
+                    item.title
+                )
+
+            : [];
+
+
+        if (!items.length) {
+
+          return {
+
+            success:
+              false,
+
+            message:
+              "No Daily Buzz items were provided."
+          };
         }
-      ],
+
+
+        this.sendSocketNotification(
+          "MIRROR_SCREEN_ACTION",
+
+          {
+
+            type:
+              "set_daily_buzz",
+
+            items
+          }
+        );
+
+
+        return {
+
+          success:
+            true,
+
+          itemCount:
+            items.length,
+
+          message:
+            "Daily Buzz updated."
+        };
+      }
 
 
       /*
-       * GPT-5 Mini was previously allowed only
-       * 300 output tokens with normal reasoning.
-       *
-       * That could use the available token budget
-       * before any visible answer appeared.
+       * CENTER
        */
 
-      reasoning: {
-        effort: "low"
-      },
+      case "show_center":
+
+        this.sendSocketNotification(
+          "MIRROR_SCREEN_ACTION",
+
+          {
+
+            type:
+              "show_center",
+
+            title:
+              String(
+                args.title ||
+                ""
+              ),
+
+            body:
+              String(
+                args.body ||
+                ""
+              )
+          }
+        );
+
+
+        return {
+
+          success:
+            true,
+
+          message:
+            "Center display updated."
+        };
 
 
       /*
-       * Give the model enough room for reasoning
-       * AND visible text.
+       * CLEAR CENTER
        */
 
-      max_output_tokens:
-        1200
-    };
+      case "clear_center":
+
+        this.sendSocketNotification(
+          "MIRROR_SCREEN_ACTION",
+
+          {
+            type:
+              "clear_center"
+          }
+        );
 
 
-    /*
-     * CONVERSATION MEMORY
-     *
-     * If there was a previous answer, connect
-     * this request to it.
-     */
+        return {
 
-    if (this.lastResponseId) {
+          success:
+            true,
 
-      requestBody.previous_response_id =
-        this.lastResponseId;
+          message:
+            "Center display cleared."
+        };
+
+
+      /*
+       * CAPTION
+       */
+
+      case "set_caption":
+
+        this.sendSocketNotification(
+          "MIRROR_SCREEN_ACTION",
+
+          {
+
+            type:
+              "set_caption",
+
+            text:
+              String(
+                args.text ||
+                ""
+              )
+          }
+        );
+
+
+        return {
+
+          success:
+            true,
+
+          message:
+            "Bottom caption updated."
+        };
+
+
+      default:
+
+        return {
+
+          success:
+            false,
+
+          message:
+            `Unknown mirror tool: ${name}`
+        };
     }
+  },
 
+
+  /*
+   * SEND ONE RESPONSES API REQUEST
+   */
+
+  async sendOpenAIResponseRequest(
+    apiKey,
+    body
+  ) {
 
     const response =
       await fetch(
         "https://api.openai.com/v1/responses",
+
         {
-          method: "POST",
+
+          method:
+            "POST",
 
           headers: {
 
@@ -878,7 +1575,7 @@ module.exports = NodeHelper.create({
 
           body:
             JSON.stringify(
-              requestBody
+              body
             )
         }
       );
@@ -891,56 +1588,296 @@ module.exports = NodeHelper.create({
     if (!response.ok) {
 
       throw new Error(
-        data?.error?.message ||
+        data
+          ?.error
+          ?.message ||
+
         "OpenAI response failed."
       );
     }
 
 
-    /*
-     * Remember this response for next time.
-     */
-
-    if (data?.id) {
-
-      this.lastResponseId =
-        data.id;
-    }
-
-
-    const answer =
-      this.extractResponseText(
-        data
-      );
-
-
-    if (!answer) {
-
-      if (
-        data
-          ?.incomplete_details
-          ?.reason ===
-        "max_output_tokens"
-      ) {
-
-        throw new Error(
-          "OpenAI ran out of response space before producing an answer."
-        );
-      }
-
-
-      throw new Error(
-        "OpenAI returned an empty answer."
-      );
-    }
-
-
-    return answer;
+    return data;
   },
 
 
   /*
-   * VOICE PERSONALITY
+   * ASK HAL
+   *
+   * This function now supports a TOOL LOOP.
+   *
+   * Example:
+   *
+   * User:
+   *   "Load my Daily Buzz."
+   *
+   * HAL:
+   *   1. searches web
+   *   2. calls set_daily_buzz
+   *   3. mirror changes
+   *   4. HAL says "Daily Buzz loaded."
+   */
+
+  async askOpenAI(
+    transcript,
+    apiKey,
+    settings
+  ) {
+
+    let userInput =
+      transcript;
+
+
+    /*
+     * Give HAL context about a clicked headline.
+     */
+
+    if (
+      this.selectedStoryTitle
+    ) {
+
+      userInput =
+        [
+          `Currently selected Daily Buzz item: "${this.selectedStoryTitle}".`,
+          `User said: ${transcript}`
+        ].join("\n");
+    }
+
+
+    const tools =
+      this.getMirrorTools();
+
+
+    const instructions =
+      this.getAssistantInstructions(
+        settings
+      );
+
+
+    /*
+     * FIRST REQUEST
+     */
+
+    const firstRequest = {
+
+      model:
+        this.chooseTextModel(
+          settings
+        ),
+
+      instructions,
+
+      input:
+        userInput,
+
+      tools,
+
+      tool_choice:
+        "auto",
+
+      reasoning: {
+
+        effort:
+          "low"
+      },
+
+      max_output_tokens:
+        1600
+    };
+
+
+    /*
+     * Continue normal conversation.
+     */
+
+    if (
+      this.lastResponseId
+    ) {
+
+      firstRequest.previous_response_id =
+        this.lastResponseId;
+    }
+
+
+    let data =
+      await this
+        .sendOpenAIResponseRequest(
+          apiKey,
+          firstRequest
+        );
+
+
+    /*
+     * HAL may request more than one tool.
+     *
+     * We allow several rounds, but not forever.
+     */
+
+    for (
+      let round = 0;
+      round < 5;
+      round += 1
+    ) {
+
+      const functionCalls =
+        this.getFunctionCalls(
+          data
+        );
+
+
+      /*
+       * NO LOCAL FUNCTION CALLS:
+       *
+       * We have HAL's final response.
+       */
+
+      if (
+        !functionCalls.length
+      ) {
+
+        if (data?.id) {
+
+          this.lastResponseId =
+            data.id;
+        }
+
+
+        const answer =
+          this.extractResponseText(
+            data
+          );
+
+
+        /*
+         * A screen-only request might theoretically
+         * produce no spoken text.
+         */
+
+        if (!answer) {
+
+          return "Done.";
+        }
+
+
+        return answer;
+      }
+
+
+      /*
+       * RUN EVERY SAFE LOCAL TOOL
+       */
+
+      const toolOutputs = [];
+
+
+      for (
+        const call
+        of functionCalls
+      ) {
+
+        let args = {};
+
+
+        try {
+
+          args =
+            JSON.parse(
+              call.arguments ||
+              "{}"
+            );
+
+        } catch (error) {
+
+          args = {};
+        }
+
+
+        Log.log(
+          `[MMM-MirrorController] HAL tool: ${call.name}`
+        );
+
+
+        const result =
+          this.executeMirrorTool(
+            call.name,
+            args
+          );
+
+
+        toolOutputs.push(
+          {
+
+            type:
+              "function_call_output",
+
+            call_id:
+              call.call_id,
+
+            output:
+              JSON.stringify(
+                result
+              )
+          }
+        );
+      }
+
+
+      /*
+       * RETURN TOOL RESULTS TO OPENAI
+       *
+       * This gives HAL the opportunity to say:
+       *
+       * "Daily Buzz loaded."
+       */
+
+      const nextRequest = {
+
+        model:
+          this.chooseTextModel(
+            settings
+          ),
+
+        instructions,
+
+        previous_response_id:
+          data.id,
+
+        input:
+          toolOutputs,
+
+        tools,
+
+        tool_choice:
+          "auto",
+
+        reasoning: {
+
+          effort:
+            "low"
+        },
+
+        max_output_tokens:
+          1600
+      };
+
+
+      data =
+        await this
+          .sendOpenAIResponseRequest(
+            apiKey,
+            nextRequest
+          );
+    }
+
+
+    throw new Error(
+      "HAL used too many screen-control steps without finishing the request."
+    );
+  },
+
+
+  /*
+   * SPEAKING STYLE
    */
 
   getVoiceInstructions(
@@ -950,6 +1887,7 @@ module.exports = NodeHelper.create({
     switch (
       settings.voice
     ) {
+
 
       case "warm":
 
@@ -961,7 +1899,7 @@ module.exports = NodeHelper.create({
       case "direct":
 
         return (
-          "Speak clearly, firmly, and efficiently. Avoid unnecessary dramatic emphasis."
+          "Speak clearly, firmly, and efficiently."
         );
 
 
@@ -1003,8 +1941,11 @@ module.exports = NodeHelper.create({
     const response =
       await fetch(
         "https://api.openai.com/v1/audio/speech",
+
         {
-          method: "POST",
+
+          method:
+            "POST",
 
           headers: {
 
@@ -1016,31 +1957,33 @@ module.exports = NodeHelper.create({
           },
 
           body:
-            JSON.stringify({
+            JSON.stringify(
+              {
 
-              model:
-                "gpt-4o-mini-tts",
+                model:
+                  "gpt-4o-mini-tts",
 
-              voice:
-                "onyx",
+                voice:
+                  "onyx",
 
-              input:
-                text.slice(
-                  0,
-                  3500
-                ),
+                input:
+                  text.slice(
+                    0,
+                    3500
+                  ),
 
-              instructions:
-                this.getVoiceInstructions(
-                  settings
-                ),
+                instructions:
+                  this.getVoiceInstructions(
+                    settings
+                  ),
 
-              response_format:
-                "wav",
+                response_format:
+                  "wav",
 
-              speed:
-                0.95
-            })
+                speed:
+                  0.95
+              }
+            )
         }
       );
 
@@ -1050,20 +1993,27 @@ module.exports = NodeHelper.create({
       let message =
         "OpenAI speech generation failed.";
 
+
       try {
 
         const data =
           await response.json();
 
+
         message =
-          data?.error?.message ||
+          data
+            ?.error
+            ?.message ||
+
           message;
 
       } catch (error) {
+
         /*
-         * Keep generic error.
+         * Keep generic message.
          */
       }
+
 
       throw new Error(
         message
@@ -1098,27 +2048,35 @@ module.exports = NodeHelper.create({
 
     await execFileAsync(
       "aplay",
+
       [
         "-D",
         `plughw:${card},0`,
 
         filePath
       ],
+
       {
-        encoding: "utf8",
-        timeout: 120000
+        encoding:
+          "utf8",
+
+        timeout:
+          120000
       }
     );
   },
 
 
   /*
-   * COMPLETE VOICE REQUEST
+   * COMPLETE VOICE TURN
    */
 
   async handleVoiceRequest() {
 
-    if (this.voiceBusy) {
+    if (
+      this.voiceBusy
+    ) {
+
       return;
     }
 
@@ -1145,10 +2103,16 @@ module.exports = NodeHelper.create({
         this.loadSettings();
 
 
+      /*
+       * LISTEN
+       */
+
       this.sendVoiceStatus(
         "Listening...",
+
         {
-          busy: true
+          busy:
+            true
         }
       );
 
@@ -1157,10 +2121,16 @@ module.exports = NodeHelper.create({
         await this.recordVoice();
 
 
+      /*
+       * TRANSCRIBE
+       */
+
       this.sendVoiceStatus(
         "Transcribing...",
+
         {
-          busy: true
+          busy:
+            true
         }
       );
 
@@ -1180,13 +2150,23 @@ module.exports = NodeHelper.create({
       }
 
 
+      /*
+       * SHOW WHAT HAL HEARD
+       */
+
       this.sendVoiceStatus(
         `You: ${transcript}`,
+
         {
-          busy: true
+          busy:
+            true
         }
       );
 
+
+      /*
+       * THINK / SEARCH / CONTROL SCREEN
+       */
 
       const answer =
         await this.askOpenAI(
@@ -1196,8 +2176,13 @@ module.exports = NodeHelper.create({
         );
 
 
+      /*
+       * SHOW FINAL ANSWER
+       */
+
       this.sendSocketNotification(
         "MIRROR_VOICE_RESULT",
+
         {
 
           transcript,
@@ -1208,14 +2193,27 @@ module.exports = NodeHelper.create({
       );
 
 
+      /*
+       * KEEP FINAL CAPTION WHILE SPEAKING
+       */
+
       this.sendVoiceStatus(
         "",
+
         {
-          busy: true,
-          replaceCaption: false
+
+          busy:
+            true,
+
+          replaceCaption:
+            false
         }
       );
 
+
+      /*
+       * CREATE SPOKEN ANSWER
+       */
 
       const speechPath =
         await this.createSpeech(
@@ -1224,6 +2222,10 @@ module.exports = NodeHelper.create({
           settings
         );
 
+
+      /*
+       * SPEAK
+       */
 
       await this.playSpeech(
         speechPath
@@ -1236,9 +2238,14 @@ module.exports = NodeHelper.create({
 
       this.sendVoiceStatus(
         "",
+
         {
-          busy: false,
-          replaceCaption: false
+
+          busy:
+            false,
+
+          replaceCaption:
+            false
         }
       );
 
@@ -1257,10 +2264,12 @@ module.exports = NodeHelper.create({
 
       this.sendSocketNotification(
         "MIRROR_VOICE_ERROR",
+
         {
 
           error:
             error?.message ||
+
             "Voice request failed."
         }
       );
@@ -1269,7 +2278,7 @@ module.exports = NodeHelper.create({
 
 
   /*
-   * RECEIVE FRONT-END COMMANDS
+   * FRONT-END MESSAGES
    */
 
   socketNotificationReceived(
@@ -1278,6 +2287,10 @@ module.exports = NodeHelper.create({
   ) {
 
 
+    /*
+     * BACKEND TEST
+     */
+
     if (
       notification ===
       "MIRROR_PING"
@@ -1285,15 +2298,22 @@ module.exports = NodeHelper.create({
 
       this.sendSocketNotification(
         "MIRROR_PONG",
+
         {
+
           message:
             "Backend is alive."
         }
       );
 
+
       return;
     }
 
+
+    /*
+     * GET SETUP
+     */
 
     if (
       notification ===
@@ -1302,12 +2322,18 @@ module.exports = NodeHelper.create({
 
       this.sendSocketNotification(
         "MIRROR_SETUP_STATE",
+
         this.getSetupState()
       );
+
 
       return;
     }
 
+
+    /*
+     * SAVE SETUP
+     */
 
     if (
       notification ===
@@ -1334,6 +2360,7 @@ module.exports = NodeHelper.create({
 
         this.sendSocketNotification(
           "MIRROR_SETUP_SAVED",
+
           {
 
             success:
@@ -1357,6 +2384,7 @@ module.exports = NodeHelper.create({
 
         this.sendSocketNotification(
           "MIRROR_SETUP_SAVED",
+
           {
 
             success:
@@ -1372,6 +2400,35 @@ module.exports = NodeHelper.create({
       return;
     }
 
+
+    /*
+     * USER CLICKED A DAILY BUZZ ITEM
+     */
+
+    if (
+      notification ===
+      "MIRROR_SELECT_STORY"
+    ) {
+
+      this.selectedStoryTitle =
+        String(
+          payload?.title ||
+          ""
+        ).trim();
+
+
+      Log.log(
+        `[MMM-MirrorController] Selected story: ${this.selectedStoryTitle}`
+      );
+
+
+      return;
+    }
+
+
+    /*
+     * START TALKING TO HAL
+     */
 
     if (
       notification ===
@@ -1389,146 +2446,183 @@ module.exports = NodeHelper.create({
 NOTES TO A NEWBIE PROGRAMMER
 ===============================================================================
 
-WHAT THIS FILE DOES:
+WHAT CHANGED?
 
-This is the BACK END of the smart mirror.
+HAL can now DO more than answer questions.
 
-The visible MagicMirror module talks to this file whenever HAL needs to:
-
-- listen through the microphones
-- call OpenAI
-- search for current information
-- remember a conversation
-- create spoken audio
-- play the answer through the speakers
+It has a small collection of safe MIRROR TOOLS.
 
 
-THE VOICE PIPELINE:
+HAL'S SCREEN TOOLS:
 
-WM8960 microphone
-       |
-       v
-    arecord
-       |
-       v
-speech transcription
-       |
-       v
-   GPT-5 Mini
-       |
-       v
- OpenAI speech
-       |
-       v
-     aplay
-       |
-       v
-WM8960 speakers
+    set_weather
+
+Changes:
+
+    temperature
+    rain chance
 
 
-WHAT CHANGED TO FIX THE EMPTY ANSWERS?
+    set_daily_buzz
 
-The old version used:
-
-    max_output_tokens: 300
-
-GPT-5 models can use part of that token allowance
-for reasoning.
-
-If the allowance is too small, there may be no
-visible answer left.
-
-The new version uses:
-
-    reasoning: {
-      effort: "low"
-    }
-
-and:
-
-    max_output_tokens: 1200
+Changes the short prompts on the right side.
 
 
-WHAT IS WEB SEARCH?
+    show_center
 
-HAL now has:
-
-    tools: [
-      {
-        type: "web_search"
-      }
-    ]
-
-That means questions such as:
-
-    "What is the temperature?"
-
-    "What's happening in the news?"
-
-    "Did it rain today?"
-
-can use current information instead of relying only
-on the AI model's built-in knowledge.
+Displays longer information in the large center area.
 
 
-WHAT IS previous_response_id?
+    clear_center
 
-After OpenAI answers, the response has an ID.
+Clears the center display.
 
-We save it in:
+
+    set_caption
+
+Changes the bottom caption.
+
+
+WHAT ABOUT THE WEB?
+
+OpenAI also receives:
+
+    web_search
+
+That is different from our screen tools.
+
+OpenAI performs the web search itself.
+
+Our Raspberry Pi performs the screen-control tools.
+
+
+EXAMPLE:
+
+USER:
+
+    "HAL, load my Daily Buzz."
+
+
+HAL CAN NOW:
+
+    1. Search current news.
+
+    2. Decide which stories are useful.
+
+    3. Add one Scripture prompt.
+
+    4. Call set_daily_buzz.
+
+    5. The right rail changes.
+
+    6. Say:
+       "Your Daily Buzz is loaded."
+
+
+WHY ARE THE DAILY BUZZ TITLES SHORT?
+
+The right side is not supposed to replace reading or conversation.
+
+It is supposed to create curiosity.
+
+For example:
+
+    "Be still, and know that I am God."
+
+    "New Mexico water ruling announced"
+
+    "AI researchers report new breakthrough"
+
+The idea is that the user sees something interesting and says:
+
+    "Tell me about the water ruling."
+
+or:
+
+    "What does that verse mean?"
+
+
+WHAT HAPPENS WHEN A HEADLINE IS CLICKED?
+
+The front end sends:
+
+    MIRROR_SELECT_STORY
+
+The backend remembers the selected title.
+
+So the user can say:
+
+    "Tell me more about that."
+
+
+WHY NOT GIVE HAL SHELL ACCESS?
+
+HAL does NOT get permission to execute arbitrary Linux commands.
+
+It cannot decide to:
+
+    delete files
+    install programs
+    rewrite code
+    shut down Linux
+
+Instead, HAL receives a carefully defined set of mirror controls.
+
+That gives HAL broad control over the EXPERIENCE without giving the model
+dangerous unrestricted control over the Raspberry Pi.
+
+
+WHAT IS THE TOOL LOOP?
+
+Sometimes HAL has to:
+
+    search
+    change the screen
+    receive confirmation
+    answer the user
+
+That requires several messages between our program and OpenAI.
+
+The loop inside:
+
+    askOpenAI()
+
+handles those steps automatically.
+
+
+CONVERSATION MEMORY:
+
+HAL still remembers the previous OpenAI response through:
 
     this.lastResponseId
 
-The next question sends that ID back.
+So conversations such as:
 
-That allows:
+    "What's the temperature?"
 
-    USER:
-    What's the temperature?
+    "What about tomorrow?"
 
-    HAL:
-    It's 84 degrees...
-
-    USER:
-    What about tomorrow?
-
-HAL can understand what "tomorrow" is referring to.
+can retain context.
 
 
-HOW LONG DOES THAT MEMORY LAST?
+NEXT STEPS AFTER THIS WORKS:
 
-For now, until MagicMirror restarts.
+1. Say:
+       "HAL, load my Daily Buzz."
 
-Later we can make longer-term memory if we want.
+2. Verify the right-side headlines change.
 
+3. Ask about one of the headlines.
 
-WHERE IS THE OPENAI API KEY?
+4. Say:
+       "Show that in the center."
 
-Only on the Raspberry Pi:
+5. Say:
+       "Clear the center."
 
-    ~/.config/anthony-magic-mirror/openai_api_key
+6. Make weather and Daily Buzz refresh automatically at startup.
 
-NEVER paste that key into GitHub.
-
-
-HOW LONG DOES HAL LISTEN?
-
-Currently:
-
-    8 seconds
-
-Later we can add voice activity detection so HAL
-naturally stops recording when you stop speaking.
-
-
-NEXT STEPS:
-
-1. Test "What's the temperature?"
-2. Test a normal knowledge question.
-3. Test a follow-up question.
-4. Add hands-free wake word.
-5. Put real weather in the top-right display.
-6. Build the Daily Buzz.
+7. Add hands-free wake-word listening.
 
 ===============================================================================
 */
