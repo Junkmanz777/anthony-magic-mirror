@@ -7,7 +7,7 @@ import signal
 from gpiozero import DigitalInputDevice
 
 
-sensor = DigitalInputDevice(27, pull_up=None)
+sensor = DigitalInputDevice(27, pull_up=None, active_state=True)
 last_state = None
 
 
