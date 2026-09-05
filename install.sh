@@ -53,7 +53,8 @@ sudo apt-get install -y \
   curl \
   ca-certificates \
   build-essential \
-  rsync
+  rsync \
+  python3-gpiozero
 
 if ! node_is_supported; then
   log "Installing a supported Node.js 22 release"

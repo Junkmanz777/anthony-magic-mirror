@@ -4,7 +4,7 @@ const Log = require("logger");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
@@ -55,6 +55,8 @@ module.exports = NodeHelper.create({
 
 
     this.voiceBusy = false;
+    this.presenceProcess = null;
+    this.presenceBuffer = "";
 
     /*
      * This gives HAL short-term conversational memory.
@@ -88,9 +90,177 @@ module.exports = NodeHelper.create({
       );
 
 
+    this.startPresenceWatcher();
+
+
     Log.log(
       "[MMM-MirrorController] Backend ready."
     );
+  },
+
+
+  /*
+   * MM-WAVE PRESENCE SENSOR
+   *
+   * A tiny Python helper owns GPIO27 using gpiozero. It only reports changes:
+   * {"present":true} or {"present":false}.
+   *
+   * If the helper cannot start, HAL continues normally with presence sleep
+   * disabled rather than crashing the mirror.
+   */
+
+  startPresenceWatcher() {
+
+    const scriptPath =
+      path.join(
+        __dirname,
+        "presence_watch.py"
+      );
+
+    const child =
+      spawn(
+        "python3",
+        [scriptPath],
+        {
+          stdio: [
+            "ignore",
+            "pipe",
+            "pipe"
+          ]
+        }
+      );
+
+    this.presenceProcess = child;
+    this.presenceBuffer = "";
+
+    child.stdout.setEncoding("utf8");
+
+    child.stdout.on(
+      "data",
+      (chunk) => {
+
+        this.presenceBuffer += chunk;
+
+        let newlineIndex;
+
+        while (
+          (
+            newlineIndex =
+              this.presenceBuffer.indexOf("\n")
+          ) >= 0
+        ) {
+
+          const line =
+            this.presenceBuffer
+              .slice(0, newlineIndex)
+              .trim();
+
+          this.presenceBuffer =
+            this.presenceBuffer
+              .slice(newlineIndex + 1);
+
+          if (!line) {
+            continue;
+          }
+
+          try {
+
+            const state =
+              JSON.parse(line);
+
+            if (
+              typeof state.present ===
+              "boolean"
+            ) {
+
+              this.sendSocketNotification(
+                "MIRROR_PRESENCE",
+                {
+                  present:
+                    state.present
+                }
+              );
+            }
+
+          } catch (error) {
+
+            Log.warn(
+              "[MMM-MirrorController] Ignoring invalid presence data:",
+              line
+            );
+          }
+        }
+      }
+    );
+
+    child.stderr.setEncoding("utf8");
+
+    child.stderr.on(
+      "data",
+      (chunk) => {
+
+        const message =
+          String(chunk || "")
+            .trim();
+
+        if (message) {
+          Log.warn(
+            "[MMM-MirrorController] Presence sensor:",
+            message
+          );
+        }
+      }
+    );
+
+    child.on(
+      "error",
+      (error) => {
+
+        Log.warn(
+          "[MMM-MirrorController] Presence watcher could not start:",
+          error.message
+        );
+      }
+    );
+
+    child.on(
+      "close",
+      (code) => {
+
+        if (
+          this.presenceProcess ===
+          child
+        ) {
+          this.presenceProcess =
+            null;
+        }
+
+        if (code) {
+          Log.warn(
+            `[MMM-MirrorController] Presence watcher stopped with code ${code}.`
+          );
+        }
+      }
+    );
+  },
+
+
+  stop() {
+
+    if (
+      this.presenceProcess
+    ) {
+
+      try {
+        this.presenceProcess
+          .kill("SIGTERM");
+      } catch (error) {
+        /* Process may already be gone. */
+      }
+
+      this.presenceProcess =
+        null;
+    }
   },
 
 

@@ -1,6 +1,7 @@
 Module.register("MMM-MirrorController", {
   defaults: {
     mirrorName: "HAL",
+    presenceSleepDelayMs: 90000,
 
     weather: {
       temperature: "--°F",
@@ -53,6 +54,11 @@ Module.register("MMM-MirrorController", {
     this.setupMessage = "";
 
     this.voiceBusy = false;
+
+    /* Presence sensor state. The mirror stays awake until the sensor says the room is empty. */
+    this.personPresent = true;
+    this.presenceSleeping = false;
+    this.presenceSleepTimer = null;
 
 
     this.sendSocketNotification(
@@ -119,6 +125,11 @@ Module.register("MMM-MirrorController", {
         this.clockTimer
       );
     }
+
+    if (this.presenceSleepTimer) {
+      clearTimeout(this.presenceSleepTimer);
+      this.presenceSleepTimer = null;
+    }
   },
 
 
@@ -152,6 +163,69 @@ Module.register("MMM-MirrorController", {
 
     this.sendSocketNotification(
       "MIRROR_START_VOICE"
+    );
+  },
+
+
+  /*
+   * PRESENCE SENSOR
+   *
+   * GPIO27 is watched by the backend. A person wakes the mirror immediately.
+   * An empty room starts a 90-second sleep timer.
+   */
+
+  handlePresence(present) {
+
+    this.personPresent = Boolean(present);
+
+    if (this.presenceSleepTimer) {
+      clearTimeout(this.presenceSleepTimer);
+      this.presenceSleepTimer = null;
+    }
+
+    if (this.personPresent) {
+
+      const wasSleeping = this.presenceSleeping;
+      this.presenceSleeping = false;
+
+      if (wasSleeping) {
+        this.updateDom(0);
+      }
+
+      return;
+    }
+
+    this.schedulePresenceSleep(
+      Number(this.config.presenceSleepDelayMs) || 90000
+    );
+  },
+
+
+  schedulePresenceSleep(delayMs) {
+
+    this.presenceSleepTimer = setTimeout(
+      () => {
+
+        this.presenceSleepTimer = null;
+
+        if (this.personPresent) {
+          return;
+        }
+
+        /*
+         * Do not blank the screen in the middle of a voice turn.
+         * Check again shortly after HAL becomes idle.
+         */
+        if (this.voiceBusy) {
+          this.schedulePresenceSleep(10000);
+          return;
+        }
+
+        this.presenceSleeping = true;
+        this.updateDom(0);
+      },
+
+      delayMs
     );
   },
 
@@ -580,6 +654,23 @@ Module.register("MMM-MirrorController", {
 
 
     /*
+     * MM-WAVE PRESENCE SENSOR
+     */
+
+    if (
+      notification ===
+      "MIRROR_PRESENCE"
+    ) {
+
+      this.handlePresence(
+        payload?.present
+      );
+
+      return;
+    }
+
+
+    /*
      * BACKEND TEST
      */
 
@@ -620,9 +711,35 @@ Module.register("MMM-MirrorController", {
     }
 
 
+    if (this.presenceSleeping) {
+
+      return (
+        this.buildPresenceSleepScreen()
+      );
+    }
+
+
     return (
       this.buildMirrorScreen()
     );
+  },
+
+
+  /*
+   * PRESENCE SLEEP SCREEN
+   */
+
+  buildPresenceSleepScreen() {
+
+    const wrapper =
+      document.createElement(
+        "div"
+      );
+
+    wrapper.className =
+      "mirror-presence-sleep";
+
+    return wrapper;
   },
 
 

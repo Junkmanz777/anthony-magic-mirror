@@ -286,6 +286,23 @@
   overflow: hidden;
 }
 
+
+/*
+ * PRESENCE SLEEP
+ *
+ * The monitor stays on for now, but every displayed pixel becomes black.
+ * This is intentionally display-agnostic until the final monitor is chosen.
+ */
+
+.mirror-presence-sleep {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  z-index: 10000;
+}
+
 /*
  * FIRST-BOOT SETUP SCREEN
  */
